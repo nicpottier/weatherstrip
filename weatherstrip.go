@@ -265,40 +265,24 @@ func buildImage() *image.RGBA {
 
 	// read our telemetry file
 	var past []byte
-	if len(os.Args) == 1 {
-		data, err := ioutil.ReadFile("./data/nwac_2018_11_23.csv")
-		if err != nil {
-			log.Fatal(err)
-		}
-		past = data
-	} else {
-		data, err := loadURLData("https://www.nwac.us/data-portal/csv/location/stevens-pass/sensortype/snow_depth/start-date/2018-11-22/end-date/2020-05-23/")
-		if err != nil {
-			log.Fatal(err)
-		}
-		past = data
+	data, err := loadURLData("https://www.nwac.us/data-portal/csv/location/stevens-pass/sensortype/snow_depth/start-date/2018-11-22/end-date/2020-05-23/")
+	if err != nil {
+		log.Fatal(err)
 	}
+	past = data
 
-	err := loadPast(merged, past)
+	err = loadPast(merged, past)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// read our forecast data
 	var future []byte
-	if len(os.Args) == 1 {
-		data, err := ioutil.ReadFile("./data/23_11_2018.json")
-		if err != nil {
-			log.Fatal(err)
-		}
-		future = data
-	} else {
-		data, err := loadURLData("https://api.weather.gov/gridpoints/SEW/164,65")
-		if err != nil {
-			log.Fatal(err)
-		}
-		future = data
+	data, err = loadURLData("https://api.weather.gov/gridpoints/SEW/164,65")
+	if err != nil {
+		log.Fatal(err)
 	}
+	future = data
 
 	err = loadFuture(merged, future)
 	if err != nil {
