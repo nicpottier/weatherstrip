@@ -240,7 +240,7 @@ func loadURLData(url string) ([]byte, error) {
 }
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	img := makeImage()
+	img := buildImage()
 	buff := &bytes.Buffer{}
 	if err := png.Encode(buff, img); err != nil {
 		log.Fatal(err)
@@ -260,7 +260,7 @@ func main() {
 	lambda.Start(handler)
 }
 
-func build() {
+func buildImage() *image.RGBA {
 	merged := make(map[time.Time]*HourForecast)
 
 	// read our telemetry file
@@ -388,20 +388,7 @@ func build() {
 		}
 	}
 
-	f, err := os.Create("weatherstrip.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := png.Encode(f, img); err != nil {
-		f.Close()
-		log.Fatal(err)
-	}
-
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
-	}
-
+	return img
 }
 
 type Forecast struct {
