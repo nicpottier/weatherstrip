@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -239,9 +240,18 @@ func loadURLData(url string) ([]byte, error) {
 }
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	img := makeImage()
+	buff := &bytes.Buffer{}
+	if err := png.Encode(buff, img); err != nil {
+		log.Fatal(err)
+	}
+	encoded := base64.StdEncoding.EncodeToString(buff.Bytes())
+
 	return events.APIGatewayProxyResponse{
-		StatusCode: 200,
-		Body:       "Hello AWS Lambda and Netlify",
+		StatusCode:      200,
+		Body:            encoded,
+		Headers:         map[string]string{"Content-Type": "image/png"},
+		IsBase64Encoded: true,
 	}, nil
 }
 
