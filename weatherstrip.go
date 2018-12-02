@@ -64,8 +64,6 @@ func loadPast(merged map[time.Time]*HourForecast, data []byte) error {
 		return err
 	}
 
-	lastSnow := float64(-1)
-
 	for i := len(rows) - 1; i >= 1; i-- {
 		// first row is our time, looks like: 2018-11-23 13:00
 		t, err := time.ParseInLocation("2006-01-02 15:04", rows[i][0], la)
@@ -85,14 +83,10 @@ func loadPast(merged map[time.Time]*HourForecast, data []byte) error {
 			}
 		}
 
-		if lastSnow != -1 {
-			merged[t] = &HourForecast{
-				hour:       t,
-				actualSnow: depth - lastSnow,
-			}
-
+		merged[t] = &HourForecast{
+			hour:       t,
+			actualSnow: depth,
 		}
-		lastSnow = depth
 	}
 
 	return nil
@@ -255,11 +249,6 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}, nil
 }
 
-func main() {
-	// Make the handler available for Remote Procedure Call by AWS Lambda
-	lambda.Start(handler)
-}
-
 func buildImage() *image.RGBA {
 	merged := make(map[time.Time]*HourForecast)
 
@@ -298,18 +287,15 @@ func buildImage() *image.RGBA {
 	// sort them
 	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
 
-	now, _ := time.ParseInLocation("2006-01-02 15:04", "2018-11-23 13:00", la)
-	now = now.Round(0)
+	// start is at 4pm the previous day
+	now := time.Now().Round(time.Hour).In(la)
+	yesterday := now.AddDate(0, 0, -1)
+	start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 16, 0, 0, 0, la)
 
-	if len(os.Args) != 1 {
-		now = time.Now().Round(time.Hour).In(la)
-	}
+	fmt.Printf("start: %s\n", start)
 
-	// start is 24 hours in the past
-	start := now.Add(time.Hour * time.Duration(-16))
-
-	// end is 40 hours in the future
-	end := now.Add(time.Hour * time.Duration(48))
+	// end is 64 hours in the future
+	end := start.Add(time.Hour * time.Duration(64))
 
 	// dump in sorted order
 	for _, t := range times {
@@ -320,22 +306,35 @@ func buildImage() *image.RGBA {
 
 	// from start to end
 	total := float64(0)
-	nightTotal := float64(0)
+
+	startDepth := merged[start].actualSnow
 
 	for curr := start; curr.Before(end); curr = curr.Add(time.Hour) {
 		offset := int(curr.Sub(start) / time.Hour)
 
+		fmt.Printf("time: %s offset: %d\n", curr, offset)
+
 		if curr == now {
-			setPixel(img, offset, 0, timeColor)
-			setPixel(img, offset, 1, timeColor)
-			setPixel(img, offset, 2, timeColor)
+			setColumn(img, offset, 0, timeColor, false)
 		}
 
 		if curr.Hour() == 0 {
+			fmt.Printf("drawing midnight at %d\n", offset)
 			setPixel(img, offset, 0, timeColor)
 			setPixel(img, offset, 1, timeColor)
 		} else if curr.Hour() == 12 {
+			fmt.Printf("drawing noon at %d\n", offset)
 			setPixel(img, offset, 0, timeColor)
+		}
+
+		// we reset accumulation at 4pm
+		if curr.Hour() == 16 {
+			total = 0
+
+			if curr.Before(now) {
+				startDepth = merged[curr].actualSnow
+				fmt.Printf("curr: %s start depth: %f\n", curr, startDepth)
+			}
 		}
 
 		forecast := merged[curr]
@@ -344,31 +343,22 @@ func buildImage() *image.RGBA {
 		}
 
 		if curr.After(now) {
-			if forecast.predictedSnow > 0 {
-				if forecast.predictedSnowLevel < snowlevel {
-					if curr.Hour() < 9 || curr.Hour() > 16 {
-						nightTotal += forecast.predictedSnow
-					} else {
-						total += forecast.predictedSnow
-						total += nightTotal
-						nightTotal = 0
-					}
-				}
-				setColumn(img, offset, 16-int(total+nightTotal), futureSnowNightColor, true)
-				setColumn(img, offset, 16-int(total), futureSnowDayColor, true)
+			if forecast.predictedSnowLevel < snowlevel {
+				total += forecast.predictedSnow
 			}
+			color := futureSnowDayColor
+			if curr.Hour() >= 16 || curr.Hour() < 9 {
+				color = futureSnowNightColor
+			}
+
+			setColumn(img, offset, 16-int(total), color, false)
 		} else {
-			if forecast.actualSnow != 0 {
-				if curr.Hour() < 9 || curr.Hour() > 16 {
-					nightTotal += forecast.actualSnow
-				} else {
-					total += forecast.actualSnow
-					total += nightTotal
-					nightTotal = 0
-				}
-				setColumn(img, offset, 16-int(total+nightTotal), pastSnowNightColor, total > 1)
-				setColumn(img, offset, 16-int(total), pastSnowDayColor, total > 1)
+			total = forecast.actualSnow - startDepth
+			color := pastSnowDayColor
+			if curr.Hour() >= 16 || curr.Hour() < 9 {
+				color = pastSnowNightColor
 			}
+			setColumn(img, offset, 16-int(total), color, false)
 		}
 	}
 
@@ -444,4 +434,24 @@ func toFahrenheit(c float64) float64 {
 
 func toInch(mm float64) float64 {
 	return mm / 25.4
+}
+
+func main() {
+	if len(os.Args) == 2 && os.Args[1] == "test" {
+		img := buildImage()
+		f, err := os.Create("weatherstrip.png")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := png.Encode(f, img); err != nil {
+			f.Close()
+			log.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		// start our AWS Handler
+		lambda.Start(handler)
+	}
 }
