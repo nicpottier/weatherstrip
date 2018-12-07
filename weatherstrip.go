@@ -42,14 +42,14 @@ var (
 )
 
 type HourForecast struct {
-	hour time.Time
+	Hour time.Time `json:"hour"`
 
-	predictedSnow      float64
-	predictedTemp      float64
-	predictedSnowLevel float64
+	PredictedSnow      float64 `json:"predicted_snow,omitempty"`
+	PredictedSnowLevel float64 `json:"predicted_snow_level,omitempty"`
+	PredictedTemp      float64 `json:"predicted_temp,omitempty"`
 
-	actualSnow float64
-	actualTemp float64
+	ActualSnow float64 `json:"actual_snow,omitempty"`
+	ActualTemp float64 `json:"actual_temp,omitempty"`
 }
 
 var la *time.Location
@@ -79,10 +79,16 @@ func dumpData(merged map[time.Time]*HourForecast) {
 	// sort them
 	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
 
+	// build a sorted list of our forecasts
+	forecasts := make([]*HourForecast, len(merged))
+
 	// dump in sorted order
-	for _, t := range times {
-		fmt.Printf("%v - %f - %f - %f - %f - %f\n", t, merged[t].actualTemp, merged[t].actualSnow, merged[t].predictedSnow, merged[t].predictedSnowLevel, merged[t].predictedTemp)
+	for i, t := range times {
+		forecasts[i] = merged[t]
 	}
+
+	dumped, _ := json.MarshalIndent(forecasts, "", "  ")
+	fmt.Println(string(dumped))
 }
 
 func loadPastHTML(merged map[time.Time]*HourForecast, data []byte) error {
@@ -122,11 +128,11 @@ func loadPastHTML(merged map[time.Time]*HourForecast, data []byte) error {
 			}
 
 			forecast := &HourForecast{
-				hour:       time.Date(year, time.Month(month), day, values[HourIDX]/100, 0, 0, 0, la),
-				actualSnow: float64(values[SnowTotal]),
-				actualTemp: float64(values[TempIDX]),
+				Hour:       time.Date(year, time.Month(month), day, values[HourIDX]/100, 0, 0, 0, la),
+				ActualSnow: float64(values[SnowTotal]),
+				ActualTemp: float64(values[TempIDX]),
 			}
-			merged[forecast.hour] = forecast
+			merged[forecast.Hour] = forecast
 		}
 	})
 
@@ -160,8 +166,8 @@ func loadPast(merged map[time.Time]*HourForecast, data []byte) error {
 		}
 
 		merged[t] = &HourForecast{
-			hour:       t,
-			actualSnow: depth,
+			Hour:       t,
+			ActualSnow: depth,
 		}
 	}
 
@@ -208,11 +214,11 @@ func loadFuture(merged map[time.Time]*HourForecast, data []byte) error {
 			present := merged[valueTime]
 			if present == nil {
 				merged[valueTime] = &HourForecast{
-					hour:          valueTime,
-					predictedSnow: value,
+					Hour:          valueTime,
+					PredictedSnow: value,
 				}
 			} else {
-				present.predictedSnow = value
+				present.PredictedSnow = value
 			}
 		}
 	}
@@ -246,11 +252,11 @@ func loadFuture(merged map[time.Time]*HourForecast, data []byte) error {
 			present := merged[valueTime]
 			if present == nil {
 				merged[valueTime] = &HourForecast{
-					hour:               valueTime,
-					predictedSnowLevel: v.Value,
+					Hour:               valueTime,
+					PredictedSnowLevel: v.Value,
 				}
 			} else {
-				present.predictedSnowLevel = v.Value
+				present.PredictedSnowLevel = v.Value
 			}
 		}
 	}
@@ -286,11 +292,11 @@ func loadFuture(merged map[time.Time]*HourForecast, data []byte) error {
 			present := merged[valueTime]
 			if present == nil {
 				merged[valueTime] = &HourForecast{
-					hour:          valueTime,
-					predictedTemp: value,
+					Hour:          valueTime,
+					PredictedTemp: value,
 				}
 			} else {
-				present.predictedTemp = value
+				present.PredictedTemp = value
 			}
 		}
 	}
@@ -379,38 +385,30 @@ func buildImage() *image.RGBA {
 	yesterday := now.AddDate(0, 0, -1)
 	start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 16, 0, 0, 0, la)
 
-	fmt.Printf("start: %s\n", start)
-
 	// end is 64 hours in the future
 	end := start.Add(time.Hour * time.Duration(64))
 
-	// dump in sorted order
-	for _, t := range times {
-		fmt.Printf("%v - %f - %f - %f - %f\n", t, merged[t].actualSnow, merged[t].predictedSnow, merged[t].predictedSnowLevel, merged[t].predictedTemp)
-	}
+	// print our data out
+	dumpData(merged)
 
 	img := makeImage()
 
 	// from start to end
 	total := float64(0)
 
-	startDepth := merged[start].actualSnow
+	startDepth := merged[start].ActualSnow
 
 	for curr := start; curr.Before(end); curr = curr.Add(time.Hour) {
 		offset := int(curr.Sub(start) / time.Hour)
-
-		fmt.Printf("time: %s offset: %d\n", curr, offset)
 
 		if curr == now {
 			setColumn(img, offset, 0, timeColor, false)
 		}
 
 		if curr.Hour() == 0 {
-			fmt.Printf("drawing midnight at %d\n", offset)
 			setPixel(img, offset, 0, timeColor)
 			setPixel(img, offset, 1, timeColor)
 		} else if curr.Hour() == 12 {
-			fmt.Printf("drawing noon at %d\n", offset)
 			setPixel(img, offset, 0, timeColor)
 		}
 
@@ -419,8 +417,7 @@ func buildImage() *image.RGBA {
 			total = 0
 
 			if curr.Before(now) {
-				startDepth = merged[curr].actualSnow
-				fmt.Printf("curr: %s start depth: %f\n", curr, startDepth)
+				startDepth = merged[curr].ActualSnow
 			}
 		}
 
@@ -430,8 +427,8 @@ func buildImage() *image.RGBA {
 		}
 
 		if curr.After(now) {
-			if forecast.predictedSnowLevel < snowlevel {
-				total += forecast.predictedSnow
+			if forecast.PredictedSnowLevel < snowlevel {
+				total += forecast.PredictedSnow
 			}
 			color := futureSnowDayColor
 			if curr.Hour() >= 16 || curr.Hour() < 9 {
@@ -440,7 +437,7 @@ func buildImage() *image.RGBA {
 
 			setColumn(img, offset, 16-int(total), color, false)
 		} else {
-			total = forecast.actualSnow - startDepth
+			total = forecast.ActualSnow - startDepth
 			color := pastSnowDayColor
 			if curr.Hour() >= 16 || curr.Hour() < 9 {
 				color = pastSnowNightColor
