@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
@@ -55,6 +56,81 @@ var la *time.Location
 
 func init() {
 	la, _ = time.LoadLocation("America/Los_Angeles")
+}
+
+// TD column indexes
+const (
+	DateIDX   = 0
+	HourIDX   = 1
+	TempIDX   = 2
+	RainHour  = 4
+	RainTotal = 5
+	Snow24    = 6
+	SnowTotal = 7
+)
+
+func dumpData(merged map[time.Time]*HourForecast) {
+	// get all our times
+	times := make([]time.Time, 0, len(merged))
+	for t := range merged {
+		times = append(times, t)
+	}
+
+	// sort them
+	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
+
+	// dump in sorted order
+	for _, t := range times {
+		fmt.Printf("%v - %f - %f - %f - %f - %f\n", t, merged[t].actualTemp, merged[t].actualSnow, merged[t].predictedSnow, merged[t].predictedSnowLevel, merged[t].predictedTemp)
+	}
+}
+
+func loadPastHTML(merged map[time.Time]*HourForecast, data []byte) error {
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(data))
+	if err != nil {
+		log.Fatal(err)
+	}
+	now := time.Now()
+
+	doc.Find("table tr").Each(func(tr int, s *goquery.Selection) {
+		// we start at the 4th tr
+		if tr >= 3 {
+			date := ""
+			values := make([]int, 12)
+
+			s.Find("td").Each(func(td int, s *goquery.Selection) {
+				if td == DateIDX {
+					date = s.Text()
+				}
+
+				// otherwise parse as a date
+				val, _ := strconv.Atoi(strings.TrimSpace(s.Text()))
+				values[td] = val
+			})
+
+			parts := strings.Split(date, "/")
+			if len(parts) != 2 {
+				return
+			}
+			month, _ := strconv.Atoi(parts[0])
+			day, _ := strconv.Atoi(parts[1])
+
+			// account for early jan but report in dec
+			year := now.Year()
+			if now.Month() == 1 && month == 12 {
+				year = year - 1
+			}
+
+			forecast := &HourForecast{
+				hour:       time.Date(year, time.Month(month), day, values[HourIDX]/100, 0, 0, 0, la),
+				actualSnow: float64(values[SnowTotal]),
+				actualTemp: float64(values[TempIDX]),
+			}
+			merged[forecast.hour] = forecast
+		}
+	})
+
+	return nil
 }
 
 func loadPast(merged map[time.Time]*HourForecast, data []byte) error {
@@ -216,8 +292,6 @@ func loadFuture(merged map[time.Time]*HourForecast, data []byte) error {
 			} else {
 				present.predictedTemp = value
 			}
-
-			fmt.Printf("set temp to %f for %s\n", value, valueTime)
 		}
 	}
 
@@ -252,18 +326,31 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 func buildImage() *image.RGBA {
 	merged := make(map[time.Time]*HourForecast)
 
-	// read our telemetry file
-	var past []byte
-	data, err := loadURLData("https://www.nwac.us/data-portal/csv/location/stevens-pass/sensortype/snow_depth/start-date/2018-11-22/end-date/2020-05-23/")
+	// scrape the stevens data
+	var html []byte
+	data, err := loadURLData("https://www.nwac.us/weatherdata/stevenshwy2/now/")
 	if err != nil {
 		log.Fatal(err)
 	}
-	past = data
+	html = data
 
-	err = loadPast(merged, past)
+	err = loadPastHTML(merged, html)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// read our telemetry file
+	//var past []byte
+	//data, err = loadURLData("https://www.nwac.us/data-portal/csv/location/stevens-pass/sensortype/snow_depth/start-date/2018-11-22/end-date/2020-05-23/")
+	//if err != nil {
+	// log.Fatal(err)
+	//}
+	//past = data
+
+	//err = loadPast(merged, past)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 
 	// read our forecast data
 	var future []byte
