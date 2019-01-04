@@ -385,6 +385,10 @@ func buildImage() *image.RGBA {
 	yesterday := now.AddDate(0, 0, -1)
 	start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 16, 0, 0, 0, la)
 
+	for merged[start] == nil {
+		start = start.Add(time.Hour)
+	}
+
 	// end is 64 hours in the future
 	end := start.Add(time.Hour * time.Duration(64))
 
@@ -395,7 +399,6 @@ func buildImage() *image.RGBA {
 
 	// from start to end
 	total := float64(0)
-
 	startDepth := merged[start].ActualSnow
 
 	for curr := start; curr.Before(end); curr = curr.Add(time.Hour) {
