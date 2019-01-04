@@ -40,7 +40,7 @@ var (
 	pastSnowNightColor   = &color.RGBA{255, 0, 0, 255}
 	futureSnowDayColor   = &color.RGBA{255, 0, 0, 255}
 	futureSnowNightColor = &color.RGBA{255, 0, 0, 255}
-	timeColor            = &color.RGBA{0, 0, 255, 255}
+	timeColor            = &color.RGBA{192, 255, 0, 255}
 )
 
 type HourForecast struct {
