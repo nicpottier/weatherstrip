@@ -29,7 +29,9 @@ const (
 	gridHeight  = 16
 	cellSize    = 16
 	cellSpacing = 1
-	snowlevel   = 1490 // 1490ft, base of Tye Mill
+	snowlevel   = 1490 // 1490m, base of Tye Mill
+
+	telemetryURL = "https://www.nwac.us/weatherdata/gracelakes/now/"
 )
 
 var (
@@ -66,7 +68,7 @@ const (
 	RainHour  = 4
 	RainTotal = 5
 	Snow24    = 6
-	SnowTotal = 7
+	SnowTotal = 8
 )
 
 func dumpData(merged map[time.Time]*HourForecast) {
@@ -334,7 +336,7 @@ func buildImage() *image.RGBA {
 
 	// scrape the stevens data
 	var html []byte
-	data, err := loadURLData("https://www.nwac.us/weatherdata/stevenshwy2/now/")
+	data, err := loadURLData(telemetryURL)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -381,7 +383,7 @@ func buildImage() *image.RGBA {
 	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
 
 	// start is at 4pm the previous day
-	now := time.Now().Round(time.Hour).In(la)
+	now := time.Now().Truncate(time.Hour).In(la)
 	yesterday := now.AddDate(0, 0, -1)
 	start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 16, 0, 0, 0, la)
 
