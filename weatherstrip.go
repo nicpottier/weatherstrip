@@ -29,7 +29,7 @@ const (
 	gridHeight  = 16
 	cellSize    = 16
 	cellSpacing = 1
-	snowlevel   = 1363 // 1490ft, base of Tye Mill
+	snowlevel   = 1490 // 1490ft, base of Tye Mill
 )
 
 var (
@@ -401,10 +401,12 @@ func buildImage() *image.RGBA {
 	total := float64(0)
 	startDepth := merged[start].ActualSnow
 
+	fmt.Printf("start: %s now: %s startDepth: %f\n", start, now, startDepth)
+
 	for curr := start; curr.Before(end); curr = curr.Add(time.Hour) {
 		offset := int(curr.Sub(start) / time.Hour)
 
-		if curr == now {
+		if curr.Equal(now) {
 			setColumn(img, offset, 0, timeColor, false)
 		}
 
@@ -417,7 +419,9 @@ func buildImage() *image.RGBA {
 
 		// we reset accumulation at 4pm
 		if curr.Hour() == 16 {
-			total = 0
+			if total > 0 {
+				total = 0
+			}
 
 			if curr.Before(now) {
 				startDepth = merged[curr].ActualSnow
@@ -429,7 +433,11 @@ func buildImage() *image.RGBA {
 			continue
 		}
 
-		if curr.After(now) {
+		if curr.After(now) || curr.Equal(now) {
+			if total < 0 {
+				total = 0
+			}
+
 			if forecast.PredictedSnowLevel < snowlevel {
 				total += forecast.PredictedSnow
 			}
@@ -438,6 +446,7 @@ func buildImage() *image.RGBA {
 				color = futureSnowNightColor
 			}
 
+			fmt.Printf("future snow: %s\t%f\t%f\t%f\n", curr, total, forecast.PredictedSnow, forecast.PredictedSnowLevel)
 			setColumn(img, offset, 16-int(total), color, false)
 		} else {
 			total = forecast.ActualSnow - startDepth
@@ -445,6 +454,7 @@ func buildImage() *image.RGBA {
 			if curr.Hour() >= 16 || curr.Hour() < 9 {
 				color = pastSnowNightColor
 			}
+			fmt.Printf("  past snow: %s\t%f\t%f\t%f\n", curr, total, forecast.ActualSnow, startDepth)
 			setColumn(img, offset, 16-int(total), color, false)
 		}
 	}
