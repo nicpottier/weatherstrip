@@ -36,11 +36,11 @@ const (
 
 var (
 	backgroundColor      = &color.RGBA{0, 0, 0, 255}
-	pastSnowDayColor     = &color.RGBA{255, 255, 255, 255}
-	pastSnowNightColor   = &color.RGBA{255, 255, 255, 255}
-	futureSnowDayColor   = &color.RGBA{255, 255, 255, 255}
-	futureSnowNightColor = &color.RGBA{255, 255, 255, 255}
-	timeColor            = &color.RGBA{64, 64, 64, 255}
+	pastSnowDayColor     = &color.RGBA{255, 0, 0, 255}
+	pastSnowNightColor   = &color.RGBA{255, 0, 0, 255}
+	futureSnowDayColor   = &color.RGBA{255, 0, 0, 255}
+	futureSnowNightColor = &color.RGBA{255, 0, 0, 255}
+	timeColor            = &color.RGBA{0, 255, 0, 255}
 )
 
 type HourForecast struct {
