@@ -373,14 +373,8 @@ func buildImage() *image.RGBA {
 		log.Fatal(err)
 	}
 
-	// get all our times
-	times := make([]time.Time, 0, len(merged))
-	for t := range merged {
-		times = append(times, t)
-	}
-
-	// sort them
-	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
+	// print our data out
+	dumpData(merged)
 
 	// start is at 4pm the previous day
 	now := time.Now().Truncate(time.Hour).In(la)
@@ -391,11 +385,13 @@ func buildImage() *image.RGBA {
 		start = start.Add(time.Hour)
 	}
 
-	// end is 64 hours in the future
-	end := start.Add(time.Hour * time.Duration(64))
+	// graph start is 4 hours back
+	graphStart := now.Add(time.Hour * -4)
 
-	// print our data out
-	dumpData(merged)
+	// end is 64 hours in the future
+	graphEnd := graphStart.Add(time.Hour * time.Duration(64))
+
+	curr := start
 
 	img := makeImage()
 
@@ -403,10 +399,28 @@ func buildImage() *image.RGBA {
 	total := float64(0)
 	startDepth := merged[start].ActualSnow
 
-	fmt.Printf("start: %s now: %s startDepth: %f\n", start, now, startDepth)
+	for ; curr.Before(graphStart); curr = curr.Add(time.Hour) {
+		forecast := merged[curr]
+		if forecast == nil {
+			continue
+		}
 
-	for curr := start; curr.Before(end); curr = curr.Add(time.Hour) {
-		offset := int(curr.Sub(start) / time.Hour)
+		// we reset accumulation at 4pm
+		if curr.Hour() == 16 {
+			if total > 0 {
+				total = 0
+			}
+
+			startDepth = merged[curr].ActualSnow
+		}
+
+		total = forecast.ActualSnow - startDepth
+	}
+
+	fmt.Printf("start: %s graphStart: %s now: %s startDepth: %f\n", start, graphStart, now, startDepth)
+
+	for ; curr.Before(graphEnd); curr = curr.Add(time.Hour) {
+		offset := int(curr.Sub(graphStart) / time.Hour)
 
 		if curr.Equal(now) {
 			setColumn(img, offset, 0, timeColor, false)
