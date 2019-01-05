@@ -41,6 +41,7 @@ var (
 	futureSnowDayColor   = &color.RGBA{255, 0, 0, 255}
 	futureSnowNightColor = &color.RGBA{255, 0, 0, 255}
 	timeColor            = &color.RGBA{192, 255, 0, 255}
+	nowColor             = &color.RGBA{90, 255, 0, 255}
 )
 
 type HourForecast struct {
@@ -423,7 +424,7 @@ func buildImage() *image.RGBA {
 		offset := int(curr.Sub(graphStart) / time.Hour)
 
 		if curr.Equal(now) {
-			setColumn(img, offset, 0, timeColor, false)
+			setColumn(img, offset, 0, nowColor, false)
 		}
 
 		if curr.Hour() == 0 {
