@@ -474,7 +474,9 @@ func buildImage() *image.RGBA {
 				startDepth = merged[curr].ActualSnow
 			}
 
-			total = forecast.ActualSnow - startDepth
+			if forecast.ActualSnow-startDepth > total {
+				total = forecast.ActualSnow - startDepth
+			}
 			color := pastSnowDayColor
 			if curr.Hour() >= 16 || curr.Hour() < 9 {
 				color = pastSnowNightColor
