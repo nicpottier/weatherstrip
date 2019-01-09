@@ -31,7 +31,7 @@ const (
 	cellSpacing = 1
 	snowlevel   = 1490 // 1490m, base of Tye Mill
 
-	telemetryURL = "https://www.nwac.us/weatherdata/gracelakes/now/"
+	telemetryURL = "https://www.nwac.us/weatherdata/stevenshwy2/now/"
 )
 
 var (
@@ -69,7 +69,7 @@ const (
 	RainHour  = 4
 	RainTotal = 5
 	Snow24    = 6
-	SnowTotal = 8
+	SnowTotal = 7
 )
 
 func dumpData(merged map[time.Time]*HourForecast) {
@@ -132,7 +132,7 @@ func loadPastHTML(merged map[time.Time]*HourForecast, data []byte) error {
 
 			forecast := &HourForecast{
 				Hour:       time.Date(year, time.Month(month), day, values[HourIDX]/100, 0, 0, 0, la),
-				ActualSnow: float64(values[SnowTotal]),
+				ActualSnow: float64(values[Snow24]),
 				ActualTemp: float64(values[TempIDX]),
 			}
 			merged[forecast.Hour] = forecast
@@ -386,7 +386,7 @@ func buildImage() *image.RGBA {
 		start = start.Add(time.Hour)
 	}
 
-	// graph start is 4 hours back
+	// when our graph actually starts
 	graphStart := now.Add(time.Hour * -4)
 
 	// end is 64 hours in the future
@@ -404,6 +404,10 @@ func buildImage() *image.RGBA {
 		forecast := merged[curr]
 		if forecast == nil {
 			continue
+		}
+
+		if merged[curr].ActualSnow < startDepth {
+			startDepth = merged[curr].ActualSnow
 		}
 
 		// we reset accumulation at 4pm
@@ -466,6 +470,10 @@ func buildImage() *image.RGBA {
 			fmt.Printf("future snow: %s\t%f\t%f\t%f\n", curr, total, forecast.PredictedSnow, forecast.PredictedSnowLevel)
 			setColumn(img, offset, 16-int(total), color, false)
 		} else {
+			if merged[curr].ActualSnow < startDepth {
+				startDepth = merged[curr].ActualSnow
+			}
+
 			total = forecast.ActualSnow - startDepth
 			color := pastSnowDayColor
 			if curr.Hour() >= 16 || curr.Hour() < 9 {
