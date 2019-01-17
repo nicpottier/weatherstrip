@@ -31,7 +31,13 @@ const (
 	cellSpacing = 1
 	snowlevel   = 1490 // 1490m, base of Tye Mill
 
-	telemetryURL = "https://www.nwac.us/weatherdata/stevenshwy2/now/"
+	// wsdot station
+	wsdotTelemetryURL = "https://www.nwac.us/weatherdata/stevenshwy2/now/"
+
+	// brooks station
+	brooksTelemetryURL = "https://www.nwac.us/weatherdata/brookssnow/now/"
+
+	telemetryURL = brooksTelemetryURL
 )
 
 var (
@@ -68,8 +74,8 @@ const (
 	TempIDX   = 2
 	RainHour  = 4
 	RainTotal = 5
-	Snow24    = 6
-	SnowTotal = 7
+	Snow24    = 9
+	SnowTotal = 10
 )
 
 func dumpData(merged map[time.Time]*HourForecast) {
