@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -35,7 +35,7 @@ const (
 	wsdotTelemetryURL = "https://www.nwac.us/weatherdata/stevenshwy2/now/"
 
 	// brooks station
-	brooksTelemetryURL = "https://www.nwac.us/weatherdata/brookssnow/now/"
+	brooksTelemetryURL = "https://api.snowobs.com/v1/station/timeseries?token=71ad26d7aaf410e39efe91bd414d32e1db5d&stid=50&source=nwac&start=201912081648&end=201912151648"
 
 	telemetryURL = brooksTelemetryURL
 )
@@ -102,50 +102,41 @@ func dumpData(merged map[time.Time]*HourForecast) {
 	fmt.Println(string(dumped))
 }
 
-func loadPastHTML(merged map[time.Time]*HourForecast, data []byte) error {
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(data))
+type TelemetryData struct {
+	Series struct {
+		Stations []struct {
+			Observations struct {
+				DateTime []time.Time `json:"date_time"`
+				Snow     []float64   `json:"snow_depth_24h"`
+				Temp     []float64   `json:"air_temp"`
+			} `json:"OBSERVATIONS"`
+		} `json:"STATION"`
+	} `json:"station_timeseries"`
+}
+
+func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
+
+	fmt.Println(string(data))
+
+	telemetry := &TelemetryData{}
+	err := json.Unmarshal(data, telemetry)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	now := time.Now()
 
-	doc.Find("table tr").Each(func(tr int, s *goquery.Selection) {
-		// we start at the 4th tr
-		if tr >= 3 {
-			date := ""
-			values := make([]int, 12)
+	if len(telemetry.Series.Stations) == 0 {
+		return errors.Errorf("no stations data")
+	}
 
-			s.Find("td").Each(func(td int, s *goquery.Selection) {
-				if td == DateIDX {
-					date = s.Text()
-				}
-
-				// otherwise parse as a date
-				val, _ := strconv.Atoi(strings.TrimSpace(s.Text()))
-				values[td] = val
-			})
-
-			parts := strings.Split(date, "/")
-			if len(parts) != 2 {
-				return
-			}
-			month, _ := strconv.Atoi(parts[0])
-			day, _ := strconv.Atoi(parts[1])
-
-			// account for early jan but report in dec
-			year := now.Year()
-			if now.Month() == 1 && month == 12 {
-				year = year - 1
-			}
-
-			forecast := &HourForecast{
-				Hour:       time.Date(year, time.Month(month), day, values[HourIDX]/100, 0, 0, 0, la),
-				ActualSnow: float64(values[Snow24]),
-				ActualTemp: float64(values[TempIDX]),
-			}
-			merged[forecast.Hour] = forecast
+	observations := telemetry.Series.Stations[0].Observations
+	for i := range observations.DateTime {
+		forecast := &HourForecast{
+			Hour:       observations.DateTime[i].In(la),
+			ActualSnow: observations.Snow[i],
+			ActualTemp: observations.Temp[i],
 		}
-	})
+		merged[forecast.Hour] = forecast
+	}
 
 	return nil
 }
@@ -344,14 +335,12 @@ func buildImage() *image.RGBA {
 	merged := make(map[time.Time]*HourForecast)
 
 	// scrape the stevens data
-	var html []byte
-	data, err := loadURLData(telemetryURL)
+	telemetryData, err := loadURLData(telemetryURL)
 	if err != nil {
 		log.Fatal(err)
 	}
-	html = data
 
-	err = loadPastHTML(merged, html)
+	err = loadPastTelemetry(merged, telemetryData)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -371,7 +360,7 @@ func buildImage() *image.RGBA {
 
 	// read our forecast data
 	var future []byte
-	data, err = loadURLData("https://api.weather.gov/gridpoints/SEW/164,65")
+	data, err := loadURLData("https://api.weather.gov/gridpoints/SEW/164,65")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -435,9 +424,12 @@ func buildImage() *image.RGBA {
 	for ; curr.Before(graphEnd); curr = curr.Add(time.Hour) {
 		offset := int(curr.Sub(graphStart) / time.Hour)
 
-		if curr.Equal(now) {
-			setColumn(img, offset, 0, nowColor, false)
-		}
+		//if curr.Equal(now) {
+		//	setPixel(img, offset, 0, timeColor)
+		//	setPixel(img, offset, 1, timeColor)
+		//	setPixel(img, offset, 2, timeColor)
+		//	setPixel(img, offset, 3, timeColor)
+		//}
 
 		if curr.Hour() == 0 {
 			setPixel(img, offset, 0, timeColor)
@@ -468,6 +460,18 @@ func buildImage() *image.RGBA {
 			}
 
 			if forecast.PredictedSnowLevel < snowlevel {
+				if forecast.PredictedSnow > 0 {
+					setPixel(img, offset, 2+(offset%2)*2, futureSnowNightColor)
+
+					if forecast.PredictedSnow > 1 {
+						setPixel(img, offset, 6+(offset%2)*2, futureSnowNightColor)
+					}
+
+					if forecast.PredictedSnow > 2 {
+						setPixel(img, offset, 10+(offset%2)*2, futureSnowNightColor)
+					}
+				}
+
 				total += forecast.PredictedSnow
 			}
 			color := futureSnowDayColor
