@@ -41,14 +41,15 @@ const (
 )
 
 var (
-	mainColor = &color.RGBA{90, 200, 255, 255}
+	mainColor = &color.RGBA{128, 255, 255, 255}
 
 	backgroundColor      = &color.RGBA{0, 0, 0, 255}
 	pastSnowDayColor     = mainColor
 	pastSnowNightColor   = mainColor
 	futureSnowDayColor   = mainColor
 	futureSnowNightColor = mainColor
-	timeColor            = mainColor
+	timeColor            = &color.RGBA{0, 128, 128, 255}
+	flakeColor           = mainColor
 	nowColor             = &color.RGBA{64, 192, 255, 255}
 )
 
@@ -461,14 +462,18 @@ func buildImage() *image.RGBA {
 
 			if forecast.PredictedSnowLevel < snowlevel {
 				if forecast.PredictedSnow > 0 {
-					setPixel(img, offset, 2+(offset%2)*2, futureSnowNightColor)
+					top := (offset % 2) * 2
 
-					if forecast.PredictedSnow > 1 {
-						setPixel(img, offset, 6+(offset%2)*2, futureSnowNightColor)
+					if forecast.PredictedSnow > 0 {
+						setPixel(img, offset, top, flakeColor)
 					}
 
-					if forecast.PredictedSnow > 2 {
-						setPixel(img, offset, 10+(offset%2)*2, futureSnowNightColor)
+					if forecast.PredictedSnow > .25 {
+						setPixel(img, offset, top+4, flakeColor)
+					}
+
+					if forecast.PredictedSnow > .50 {
+						setPixel(img, offset, top+6, flakeColor)
 					}
 				}
 
@@ -495,6 +500,13 @@ func buildImage() *image.RGBA {
 			}
 			fmt.Printf("  past snow: %s\t%f\t%f\t%f\n", curr, total, forecast.ActualSnow, startDepth)
 			setColumn(img, offset, 16-int(total), color, false)
+		}
+
+		if curr.Hour() == 0 {
+			setPixel(img, offset, 0, timeColor)
+			setPixel(img, offset, 1, timeColor)
+		} else if curr.Hour() == 12 {
+			setPixel(img, offset, 0, timeColor)
 		}
 	}
 
