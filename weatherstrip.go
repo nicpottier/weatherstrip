@@ -35,7 +35,7 @@ const (
 	wsdotTelemetryURL = "https://www.nwac.us/weatherdata/stevenshwy2/now/"
 
 	// brooks station
-	brooksTelemetryURL = "https://api.snowobs.com/v1/station/timeseries?token=71ad26d7aaf410e39efe91bd414d32e1db5d&stid=50&source=nwac&start=201912081648&end=201912151648"
+	brooksTelemetryURL = "https://api.snowobs.com/v1/station/timeseries?token=71ad26d7aaf410e39efe91bd414d32e1db5d&stid=50&source=nwac&start=%s&end=%s"
 
 	telemetryURL = brooksTelemetryURL
 )
@@ -335,8 +335,13 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 func buildImage() *image.RGBA {
 	merged := make(map[time.Time]*HourForecast)
 
+	now := time.Now().In(la)
+
+	url := fmt.Sprintf(telemetryURL, now.AddDate(0, 0, -1).Format("200601021504"), now.Format("200601021504"))
+	fmt.Println(url)
+
 	// scrape the stevens data
-	telemetryData, err := loadURLData(telemetryURL)
+	telemetryData, err := loadURLData(url)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -376,7 +381,7 @@ func buildImage() *image.RGBA {
 	dumpData(merged)
 
 	// start is at 4pm the previous day
-	now := time.Now().Truncate(time.Hour).In(la)
+	now = time.Now().Truncate(time.Hour).In(la)
 	yesterday := now.AddDate(0, 0, -1)
 	start := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 16, 0, 0, 0, la)
 
