@@ -473,7 +473,7 @@ func buildImage() *image.RGBA {
 					}
 
 					if forecast.PredictedSnow > .50 {
-						setPixel(img, offset, top+6, flakeColor)
+						setPixel(img, offset, top+8, flakeColor)
 					}
 				}
 
