@@ -483,7 +483,14 @@ func buildImage() *image.RGBA {
 				}
 
 				total += forecast.PredictedSnow
+			} else {
+				top := (offset % 2) * 3
+				if forecast.PredictedSnow > 0 {
+					setPixel(img, offset, top, flakeColor)
+					setPixel(img, offset, top+1, flakeColor)
+				}
 			}
+
 			color := futureSnowDayColor
 			if curr.Hour() >= 16 || curr.Hour() < 9 {
 				color = futureSnowNightColor
