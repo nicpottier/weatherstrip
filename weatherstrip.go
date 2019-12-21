@@ -451,7 +451,11 @@ func buildImage() *image.RGBA {
 			}
 
 			if curr.Before(now) {
-				startDepth = merged[curr].ActualSnow
+				if merged[curr] != nil {
+					startDepth = merged[curr].ActualSnow
+				} else {
+					startDepth = 0
+				}
 			}
 		}
 
