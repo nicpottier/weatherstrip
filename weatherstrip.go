@@ -35,7 +35,7 @@ const (
 	wsdotTelemetryURL = "https://www.nwac.us/weatherdata/stevenshwy2/now/"
 
 	// brooks station
-	brooksTelemetryURL = "https://api.snowobs.com/v1/station/timeseries?token=71ad26d7aaf410e39efe91bd414d32e1db5d&stid=50&source=nwac&start=%s&end=%s"
+	brooksTelemetryURL = "https://api.snowobs.com/v1/station/timeseries?token=71ad26d7aaf410e39efe91bd414d32e1db5d&stid=50&source=nwac"
 
 	telemetryURL = brooksTelemetryURL
 )
@@ -108,7 +108,8 @@ type TelemetryData struct {
 		Stations []struct {
 			Observations struct {
 				DateTime []time.Time `json:"date_time"`
-				Snow     []float64   `json:"snow_depth_24h"`
+				Snow24   []float64   `json:"snow_depth_24h"`
+				Snow     []float64   `json:"snow_depth"`
 				Temp     []float64   `json:"air_temp"`
 			} `json:"OBSERVATIONS"`
 		} `json:"STATION"`
@@ -136,6 +137,10 @@ func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
 			ActualSnow: observations.Snow[i],
 			ActualTemp: observations.Temp[i],
 		}
+
+		// subtract one hour from our forecast hour, telemetry data is taken at the top of the hour and represents
+		// what happened in the previous hour
+		forecast.Hour = forecast.Hour.Add(-time.Minute * 60)
 		merged[forecast.Hour] = forecast
 	}
 
@@ -337,11 +342,11 @@ func buildImage() *image.RGBA {
 
 	now := time.Now().In(la)
 
-	url := fmt.Sprintf(telemetryURL, now.AddDate(0, 0, -1).Format("200601021504"), now.Format("200601021504"))
-	fmt.Println(url)
+	//url := fmt.Sprintf(telemetryURL, now.AddDate(0, 0, -1).Format("200601021504"), now.Format("200601021504"))
+	//fmt.Println(url)
 
 	// scrape the stevens data
-	telemetryData, err := loadURLData(url)
+	telemetryData, err := loadURLData(telemetryURL)
 	if err != nil {
 		log.Fatal(err)
 	}
