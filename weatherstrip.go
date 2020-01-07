@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -31,6 +30,9 @@ const (
 	cellSpacing = 1
 	snowlevel   = 1490 // 1490m, base of Tye Mill
 
+	coldTemp = 28 // anything less than this is nice powder
+	hotTemp  = 32 // anything more than this is rain
+
 	// wsdot station
 	wsdotTelemetryURL = "https://www.nwac.us/weatherdata/stevenshwy2/now/"
 
@@ -43,6 +45,8 @@ const (
 var (
 	mainColor = &color.RGBA{128, 255, 255, 255}
 
+	sunColor = &color.RGBA{168, 255, 0, 255}
+
 	backgroundColor      = &color.RGBA{0, 0, 0, 255}
 	pastSnowDayColor     = mainColor
 	pastSnowNightColor   = mainColor
@@ -51,7 +55,17 @@ var (
 	timeColor            = &color.RGBA{0, 128, 128, 255}
 	flakeColor           = mainColor
 	nowColor             = &color.RGBA{64, 192, 255, 255}
+
+	coldColor = &color.RGBA{50, 168, 168, 255}
+	hotColor  = &color.RGBA{139, 168, 50, 255}
 )
+
+var tempColors = map[int]*color.RGBA{
+	29: &color.RGBA{50, 168, 0, 255},
+	30: &color.RGBA{50, 168, 119, 255},
+	31: &color.RGBA{50, 158, 58, 255},
+	32: &color.RGBA{98, 168, 50, 255},
+}
 
 type HourForecast struct {
 	Hour time.Time `json:"hour"`
@@ -60,8 +74,9 @@ type HourForecast struct {
 	PredictedSnowLevel float64 `json:"predicted_snow_level,omitempty"`
 	PredictedTemp      float64 `json:"predicted_temp,omitempty"`
 
-	ActualSnow float64 `json:"actual_snow,omitempty"`
-	ActualTemp float64 `json:"actual_temp,omitempty"`
+	ActualSnow   float64 `json:"actual_snow,omitempty"`
+	ActualTemp   float64 `json:"actual_temp,omitempty"`
+	ActualPrecip float64 `json:"actual_precip,omitempty"`
 }
 
 var la *time.Location
@@ -69,17 +84,6 @@ var la *time.Location
 func init() {
 	la, _ = time.LoadLocation("America/Los_Angeles")
 }
-
-// TD column indexes
-const (
-	DateIDX   = 0
-	HourIDX   = 1
-	TempIDX   = 2
-	RainHour  = 4
-	RainTotal = 5
-	Snow24    = 9
-	SnowTotal = 10
-)
 
 func dumpData(merged map[time.Time]*HourForecast) {
 	// get all our times
@@ -107,19 +111,17 @@ type TelemetryData struct {
 	Series struct {
 		Stations []struct {
 			Observations struct {
-				DateTime []time.Time `json:"date_time"`
-				Snow24   []float64   `json:"snow_depth_24h"`
-				Snow     []float64   `json:"snow_depth"`
-				Temp     []float64   `json:"air_temp"`
+				DateTime   []time.Time `json:"date_time"`
+				Snow24     []float64   `json:"snow_depth_24h"`
+				Snow       []float64   `json:"snow_depth"`
+				Temp       []float64   `json:"air_temp"`
+				HourPrecip []float64   `json:"precip_accum_one_hour"`
 			} `json:"OBSERVATIONS"`
 		} `json:"STATION"`
 	} `json:"station_timeseries"`
 }
 
 func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
-
-	fmt.Println(string(data))
-
 	telemetry := &TelemetryData{}
 	err := json.Unmarshal(data, telemetry)
 	if err != nil {
@@ -133,50 +135,16 @@ func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
 	observations := telemetry.Series.Stations[0].Observations
 	for i := range observations.DateTime {
 		forecast := &HourForecast{
-			Hour:       observations.DateTime[i].In(la),
-			ActualSnow: observations.Snow[i],
-			ActualTemp: observations.Temp[i],
+			Hour:         observations.DateTime[i].In(la),
+			ActualSnow:   observations.Snow[i],
+			ActualTemp:   observations.Temp[i],
+			ActualPrecip: observations.HourPrecip[i],
 		}
 
 		// subtract one hour from our forecast hour, telemetry data is taken at the top of the hour and represents
 		// what happened in the previous hour
 		forecast.Hour = forecast.Hour.Add(-time.Minute * 60)
 		merged[forecast.Hour] = forecast
-	}
-
-	return nil
-}
-
-func loadPast(merged map[time.Time]*HourForecast, data []byte) error {
-	reader := csv.NewReader(bytes.NewReader(data))
-	rows, err := reader.ReadAll()
-	if err != nil {
-		return err
-	}
-
-	for i := len(rows) - 1; i >= 1; i-- {
-		// first row is our time, looks like: 2018-11-23 13:00
-		t, err := time.ParseInLocation("2006-01-02 15:04", rows[i][0], la)
-		if err != nil {
-			return err
-		}
-		t = t.Round(0)
-
-		// last row is brooks total snow depth
-		depth := float64(0)
-		if rows[i][4] != "" {
-			val, err := strconv.ParseFloat(rows[i][4], 10)
-			if err != nil {
-				log.Printf("error parsing depth: %s, ignoring: %s", rows[i][4], err)
-			} else {
-				depth = val
-			}
-		}
-
-		merged[t] = &HourForecast{
-			Hour:       t,
-			ActualSnow: depth,
-		}
 	}
 
 	return nil
@@ -443,14 +411,15 @@ func buildImage() *image.RGBA {
 		//}
 
 		if curr.Hour() == 0 {
-			setPixel(img, offset, 0, timeColor)
-			setPixel(img, offset, 1, timeColor)
+			setPixel(img, offset, 14, timeColor)
+			setPixel(img, offset, 15, timeColor)
 		} else if curr.Hour() == 12 {
-			setPixel(img, offset, 0, timeColor)
+			setPixel(img, offset, 15, timeColor)
 		}
 
 		// we reset accumulation at 4pm
 		if curr.Hour() == 16 {
+			fmt.Printf("16 hour: %s\n", curr.String())
 			if total > 0 {
 				total = 0
 			}
@@ -458,6 +427,7 @@ func buildImage() *image.RGBA {
 			if curr.Before(now) {
 				if merged[curr] != nil {
 					startDepth = merged[curr].ActualSnow
+					fmt.Printf("start depth reset to: %f\n", merged[curr].ActualSnow)
 				} else {
 					startDepth = 0
 				}
@@ -470,13 +440,21 @@ func buildImage() *image.RGBA {
 		}
 
 		if curr.After(now) || curr.Equal(now) {
+			if forecast.PredictedTemp > hotTemp {
+				setPixel(img, offset, 0, hotColor)
+			} else if forecast.PredictedTemp < coldTemp {
+				setPixel(img, offset, 0, coldColor)
+			} else {
+				setPixel(img, offset, 0, tempColors[int(forecast.PredictedTemp)])
+			}
+
 			if total < 0 {
 				total = 0
 			}
 
 			if forecast.PredictedSnowLevel < snowlevel {
 				if forecast.PredictedSnow > 0 {
-					top := (offset % 2) * 2
+					top := 1 + (offset%2)*2
 
 					if forecast.PredictedSnow > 0 {
 						setPixel(img, offset, top, flakeColor)
@@ -493,7 +471,7 @@ func buildImage() *image.RGBA {
 
 				total += forecast.PredictedSnow
 			} else {
-				top := (offset % 2) * 3
+				top := 1 + (offset%2)*3
 				if forecast.PredictedSnow > 0 {
 					setPixel(img, offset, top, flakeColor)
 					setPixel(img, offset, top+1, flakeColor)
@@ -505,9 +483,17 @@ func buildImage() *image.RGBA {
 				color = futureSnowNightColor
 			}
 
-			fmt.Printf("future snow: %s\t%f\t%f\t%f\n", curr, total, forecast.PredictedSnow, forecast.PredictedSnowLevel)
+			fmt.Printf("future snow: %s\t%f\t%f\t%f\t%f\n", curr, total, forecast.PredictedSnow, forecast.PredictedSnowLevel, forecast.PredictedTemp)
 			setColumn(img, offset, 16-int(total), color, false)
 		} else {
+			if forecast.ActualTemp > hotTemp {
+				setPixel(img, offset, 0, hotColor)
+			} else if forecast.ActualTemp < coldTemp {
+				setPixel(img, offset, 0, coldColor)
+			} else {
+				setPixel(img, offset, 0, tempColors[int(forecast.ActualTemp)])
+			}
+
 			if merged[curr].ActualSnow < startDepth {
 				startDepth = merged[curr].ActualSnow
 			}
@@ -519,15 +505,15 @@ func buildImage() *image.RGBA {
 			if curr.Hour() >= 16 || curr.Hour() < 9 {
 				color = pastSnowNightColor
 			}
-			fmt.Printf("  past snow: %s\t%f\t%f\t%f\n", curr, total, forecast.ActualSnow, startDepth)
+			fmt.Printf("  past snow: %s\t%f\t%f\t%f\t%f\n", curr, total, forecast.ActualSnow, startDepth, forecast.ActualTemp)
 			setColumn(img, offset, 16-int(total), color, false)
 		}
 
 		if curr.Hour() == 0 {
-			setPixel(img, offset, 0, timeColor)
-			setPixel(img, offset, 1, timeColor)
+			setPixel(img, offset, 15, timeColor)
+			setPixel(img, offset, 14, timeColor)
 		} else if curr.Hour() == 12 {
-			setPixel(img, offset, 0, timeColor)
+			setPixel(img, offset, 15, timeColor)
 		}
 	}
 
