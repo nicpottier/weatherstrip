@@ -30,7 +30,7 @@ const (
 	cellSpacing = 1
 	snowlevel   = 1490 // 1490m, base of Tye Mill
 
-	coldTemp = 28 // anything less than this is nice powder
+	coldTemp = 29 // anything less than this is nice powder
 	hotTemp  = 32 // anything more than this is rain
 
 	// wsdot station
@@ -439,14 +439,10 @@ func buildImage() *image.RGBA {
 			continue
 		}
 
+		temp := float64(0)
+
 		if curr.After(now) || curr.Equal(now) {
-			if forecast.PredictedTemp > hotTemp {
-				setPixel(img, offset, 0, hotColor)
-			} else if forecast.PredictedTemp < coldTemp {
-				setPixel(img, offset, 0, coldColor)
-			} else {
-				setPixel(img, offset, 0, tempColors[int(forecast.PredictedTemp)])
-			}
+			temp = forecast.PredictedTemp
 
 			if total < 0 {
 				total = 0
@@ -486,12 +482,17 @@ func buildImage() *image.RGBA {
 			fmt.Printf("future snow: %s\t%f\t%f\t%f\t%f\n", curr, total, forecast.PredictedSnow, forecast.PredictedSnowLevel, forecast.PredictedTemp)
 			setColumn(img, offset, 16-int(total), color, false)
 		} else {
-			if forecast.ActualTemp > hotTemp {
-				setPixel(img, offset, 0, hotColor)
-			} else if forecast.ActualTemp < coldTemp {
-				setPixel(img, offset, 0, coldColor)
-			} else {
-				setPixel(img, offset, 0, tempColors[int(forecast.ActualTemp)])
+			temp = forecast.ActualTemp
+
+			if merged[curr].ActualPrecip > 0 {
+				if merged[curr].ActualTemp > hotTemp {
+					top := 1 + (offset%2)*3
+					setPixel(img, offset, top, flakeColor)
+					setPixel(img, offset, top+1, flakeColor)
+				} else {
+					top := 1 + (offset%2)*2
+					setPixel(img, offset, top, flakeColor)
+				}
 			}
 
 			if merged[curr].ActualSnow < startDepth {
@@ -509,6 +510,16 @@ func buildImage() *image.RGBA {
 			setColumn(img, offset, 16-int(total), color, false)
 		}
 
+		// display our temp strip
+		if temp > hotTemp {
+			setPixel(img, offset, 0, hotColor)
+		} else if temp < coldTemp {
+			setPixel(img, offset, 0, coldColor)
+		} else {
+			setPixel(img, offset, 0, tempColors[int(temp)])
+		}
+
+		// rewrite our time ticks in case they were written over
 		if curr.Hour() == 0 {
 			setPixel(img, offset, 15, timeColor)
 			setPixel(img, offset, 14, timeColor)
