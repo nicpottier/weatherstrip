@@ -30,7 +30,7 @@ const (
 	cellSpacing = 1
 	snowlevel   = 1490 // 1490m, base of Tye Mill
 
-	coldTemp = 29 // anything less than this is nice powder
+	coldTemp = 20 // anything less than this is cold
 	hotTemp  = 32 // anything more than this is rain
 
 	// wsdot station
@@ -56,15 +56,24 @@ var (
 	flakeColor           = mainColor
 	nowColor             = &color.RGBA{64, 192, 255, 255}
 
-	coldColor = &color.RGBA{50, 168, 168, 255}
+	coldColor = &color.RGBA{50, 168, 255, 255}
 	hotColor  = &color.RGBA{139, 168, 50, 255}
 )
 
 var tempColors = map[int]*color.RGBA{
-	29: &color.RGBA{50, 168, 0, 255},
-	30: &color.RGBA{50, 168, 119, 255},
-	31: &color.RGBA{50, 158, 58, 255},
-	32: &color.RGBA{98, 168, 50, 255},
+	20: &color.RGBA{50, 168, 255, 255},
+	21: &color.RGBA{75, 170, 255, 255},
+	22: &color.RGBA{75, 175, 255, 255},
+	23: &color.RGBA{75, 180, 255, 255},
+	24: &color.RGBA{80, 190, 255, 255},
+	25: &color.RGBA{90, 200, 255, 255},
+	26: &color.RGBA{100, 210, 255, 255},
+	27: &color.RGBA{110, 220, 255, 255},
+	28: &color.RGBA{110, 220, 220, 255},
+	29: &color.RGBA{110, 210, 210, 255},
+	30: &color.RGBA{110, 200, 200, 255},
+	31: &color.RGBA{110, 200, 160, 255},
+	32: &color.RGBA{110, 160, 50, 255},
 }
 
 type HourForecast struct {
