@@ -82,6 +82,7 @@ type HourForecast struct {
 	PredictedSnow      float64 `json:"predicted_snow,omitempty"`
 	PredictedSnowLevel float64 `json:"predicted_snow_level,omitempty"`
 	PredictedTemp      float64 `json:"predicted_temp,omitempty"`
+	PredictedPrecip    float64 `json:"predicted_precip,omitempty"`
 
 	ActualSnow   float64 `json:"actual_snow,omitempty"`
 	ActualTemp   float64 `json:"actual_temp,omitempty"`
@@ -286,6 +287,44 @@ func loadFuture(merged map[time.Time]*HourForecast, data []byte) error {
 		}
 	}
 
+	for _, v := range forecast.Properties.Precip.Values {
+		// split on /
+		parts := strings.Split(v.Time, "/")
+
+		// Mon Jan 2 15:04:05 MST 2006
+		t, err := time.ParseInLocation("2006-01-02T15:04:05+00:00", parts[0], la)
+		if err != nil {
+			return err
+		}
+		t = t.Round(0)
+
+		// figure out range this represents
+		hourMatch := regex.FindAllStringSubmatch(parts[1], 1)
+		if len(hourMatch) == 0 {
+			log.Printf("unable to find range for: %s\n", parts[1])
+			continue
+		}
+
+		hours, err := strconv.Atoi(hourMatch[0][1])
+		if err != nil {
+			return err
+		}
+
+		for h := 0; h < hours; h++ {
+			valueTime := t.Add(time.Hour * time.Duration(h))
+
+			present := merged[valueTime]
+			if present == nil {
+				merged[valueTime] = &HourForecast{
+					Hour:            valueTime,
+					PredictedPrecip: v.Value,
+				}
+			} else {
+				present.PredictedPrecip = v.Value
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -477,7 +516,7 @@ func buildImage() *image.RGBA {
 				total += forecast.PredictedSnow
 			} else {
 				top := 1 + (offset%2)*3
-				if forecast.PredictedSnow > 0 {
+				if forecast.PredictedSnow > 0 || forecast.PredictedPrecip > 0 {
 					setPixel(img, offset, top, flakeColor)
 					setPixel(img, offset, top+1, flakeColor)
 				}
@@ -560,6 +599,12 @@ type Forecast struct {
 				Value float64 `json:"value"`
 			} `json:"values"`
 		} `json:"snowLevel"`
+		Precip struct {
+			Values []struct {
+				Time  string  `json:"validTime"`
+				Value float64 `json:"value"`
+			} `json:"values"`
+		} `json:"quantitativePrecipitation"`
 	} `json:"properties"`
 }
 
