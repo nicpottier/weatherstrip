@@ -39,7 +39,10 @@ const (
 	// brooks station
 	brooksTelemetryURL = "https://api.snowobs.com/v1/station/timeseries?token=71ad26d7aaf410e39efe91bd414d32e1db5d&stid=50&source=nwac"
 
-	telemetryURL = brooksTelemetryURL
+	// new nwac URL
+	newNWACURL = "https://nwac.us/api/v5/measurement?data_logger=21&limit=100"
+
+	telemetryURL = newNWACURL
 )
 
 var (
@@ -118,17 +121,13 @@ func dumpData(merged map[time.Time]*HourForecast) {
 }
 
 type TelemetryData struct {
-	Series struct {
-		Stations []struct {
-			Observations struct {
-				DateTime   []time.Time `json:"date_time"`
-				Snow24     []float64   `json:"snow_depth_24h"`
-				Snow       []float64   `json:"snow_depth"`
-				Temp       []float64   `json:"air_temp"`
-				HourPrecip []float64   `json:"precip_accum_one_hour"`
-			} `json:"OBSERVATIONS"`
-		} `json:"STATION"`
-	} `json:"station_timeseries"`
+	Results []struct {
+		DateTime      time.Time `json:"datetime"`
+		Snow24        float64   `json:"snowfall_24_hour"`
+		Snow          float64   `json:"snow_depth"`
+		Temp          float64   `json:"temperature"`
+		Precipitation float64   `json:"precipitation"`
+	} `json:"results"`
 }
 
 func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
@@ -138,17 +137,16 @@ func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
 		return err
 	}
 
-	if len(telemetry.Series.Stations) == 0 {
+	if len(telemetry.Results) == 0 {
 		return errors.Errorf("no stations data")
 	}
 
-	observations := telemetry.Series.Stations[0].Observations
-	for i := range observations.DateTime {
+	for _, result := range telemetry.Results {
 		forecast := &HourForecast{
-			Hour:         observations.DateTime[i].In(la),
-			ActualSnow:   observations.Snow[i],
-			ActualTemp:   observations.Temp[i],
-			ActualPrecip: observations.HourPrecip[i],
+			Hour:         result.DateTime.In(la),
+			ActualSnow:   result.Snow,
+			ActualTemp:   result.Temp,
+			ActualPrecip: result.Precipitation,
 		}
 
 		// subtract one hour from our forecast hour, telemetry data is taken at the top of the hour and represents
