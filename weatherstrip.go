@@ -161,7 +161,9 @@ func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
 			ActualPrecip: result.Precipitation,
 		}
 
-		if last != 0 && forecast.ActualSnow-last > 12 {
+		// if this looks unresonable, then use last value for 24 snow
+		// telemetry sometimes reports garbage like 48 inches in an hour
+		if last != 0 && forecast.ActualSnow-last > 6 {
 			forecast.ActualSnow = last
 		}
 		last = forecast.ActualSnow
