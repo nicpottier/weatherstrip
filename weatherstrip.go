@@ -40,7 +40,7 @@ const (
 	brooksTelemetryURL = "https://api.snowobs.com/v1/station/timeseries?token=71ad26d7aaf410e39efe91bd414d32e1db5d&stid=50&source=nwac"
 
 	// new nwac URL
-	newNWACURL = "https://nwac.us/api/v5/measurement?data_logger=21&limit=100"
+	newNWACURL = "https://nwac.us/api/v5/measurement?data_logger=13&limit=100"
 
 	telemetryURL = newNWACURL
 )
@@ -99,6 +99,10 @@ func init() {
 }
 
 func dumpData(merged map[time.Time]*HourForecast) {
+	if !debug {
+		return
+	}
+
 	// get all our times
 	times := make([]time.Time, 0, len(merged))
 	for t := range merged {
@@ -116,8 +120,10 @@ func dumpData(merged map[time.Time]*HourForecast) {
 		forecasts[i] = merged[t]
 	}
 
-	dumped, _ := json.MarshalIndent(forecasts, "", "  ")
-	fmt.Println(string(dumped))
+	if debug {
+		dumped, _ := json.MarshalIndent(forecasts, "", "  ")
+		fmt.Println(string(dumped))
+	}
 }
 
 type TelemetryData struct {
@@ -137,17 +143,28 @@ func loadPastTelemetry(merged map[time.Time]*HourForecast, data []byte) error {
 		return err
 	}
 
+	if debug {
+		dump, _ := json.MarshalIndent(telemetry, "", "  ")
+		fmt.Println(string(dump))
+	}
+
 	if len(telemetry.Results) == 0 {
 		return errors.Errorf("no stations data")
 	}
 
+	last := 0.0
 	for _, result := range telemetry.Results {
 		forecast := &HourForecast{
 			Hour:         result.DateTime.In(la),
-			ActualSnow:   result.Snow,
+			ActualSnow:   result.Snow24,
 			ActualTemp:   result.Temp,
 			ActualPrecip: result.Precipitation,
 		}
+
+		if last != 0 && forecast.ActualSnow-last > 12 {
+			forecast.ActualSnow = last
+		}
+		last = forecast.ActualSnow
 
 		// subtract one hour from our forecast hour, telemetry data is taken at the top of the hour and represents
 		// what happened in the previous hour
@@ -177,7 +194,7 @@ func loadFuture(merged map[time.Time]*HourForecast, data []byte) error {
 			return err
 		}
 		t = t.Round(0)
-		in := toInch(v.Value)
+		in := mmToInch(v.Value)
 
 		// figure out range this represents
 		hourMatch := regex.FindAllStringSubmatch(parts[1], 1)
@@ -650,12 +667,16 @@ func toFahrenheit(c float64) float64 {
 	return c*9/5 + 32
 }
 
-func toInch(mm float64) float64 {
+func mmToInch(mm float64) float64 {
 	return mm / 25.4
 }
 
+var debug = false
+
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "test" {
+		debug = true
+
 		img := buildImage()
 		f, err := os.Create("weatherstrip.png")
 		if err != nil {
